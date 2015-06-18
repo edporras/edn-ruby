@@ -2,12 +2,14 @@ module EDN
   class Reader
 
     def initialize(source)
-      @parser = Parser.new(source)
+      data = source.instance_of?(String) ? source : source.read
+
+      @parser = ExtParser.new(data)
     end
 
     def read(eof_value = NOTHING)
       result = @parser.read
-      if result == EOF 
+      if result == EOF
         raise "Unexpected end of file" if eof_value == NOTHING
         return eof_value
       end

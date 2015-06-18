@@ -5,16 +5,37 @@ require 'edn/types'
 require 'edn/metadata'
 require 'edn/char_stream'
 require 'edn/parser'
+require 'edn/ragel_parser'
 require 'edn/reader'
+require 'edn/edn_ragel'
 
 module EDN
-  @tags = Hash.new
+
+  # Object returned when there is nothing to return
+
+  NOTHING = Object.new
+
+  # Object to return when we hit end of file. Cant be nil or :eof
+  # because either of those could be something in the EDN data.
+
+  EOF = Object.new
+
+
+  # tagged element registered items
+  @tags = {
+    # built-in elements
+    "inst" => lambda { |*a| DateTime.parse(*a) },
+    "uuid" => lambda { |*a| String.new(*a) }
+  }
 
   def self.read(edn, eof_value=NOTHING)
     EDN::Reader.new(edn).read(eof_value)
   end
 
   def self.register(tag, func = nil, &block)
+    # don't allow re-registration of built-in tags
+    return if tag == "inst" && tag == "uuid"
+
     if block_given?
       func = block
     end
@@ -54,12 +75,4 @@ module EDN
   def self.list(*values)
     EDN::Type::List.new(*values)
   end
-end
-
-EDN.register("inst") do |value|
-  DateTime.parse(value)
-end
-
-EDN.register("uuid") do |value|
-  EDN::Type::UUID.new(value)
 end

@@ -4,15 +4,6 @@ require 'set'
 
 module EDN
 
-  # Object returned when there is nothing to return
-
-  NOTHING = Object.new
-
-  # Object to return when we hit end of file. Cant be nil or :eof
-  # because either of those could be something in the EDN data.
-
-  EOF = Object.new
-
   # Reader table
 
   READERS = {}
@@ -46,37 +37,6 @@ module EDN
       READERS[ch] = handler
     else
       READERS[ch] = block
-    end
-  end
-
-  TAGS = {}
-
-  def self.register(tag, func = nil, &block)
-    if block_given?
-      func = block
-    end
-
-    if func.nil?
-      func = lambda { |x| x }
-    end
-
-    if func.is_a?(Class)
-      TAGS[tag] = lambda { |*args| func.new(*args) }
-    else
-      TAGS[tag] = func
-    end
-  end
-
-  def self.unregister(tag)
-    TAGS[tag] = nil
-  end
-
-  def self.tagged_element(tag, element)
-    func = TAGS[tag]
-    if func
-      func.call(element)
-    else
-      EDN::Type::Unknown.new(tag, element)
     end
   end
 
