@@ -3,7 +3,7 @@
 
 #include <string>
 #include <sstream>
-#include <stack>
+#include <vector>
 
 #include <ruby/ruby.h>
 
@@ -14,8 +14,10 @@ namespace edn
     extern VALUE EDNT_MAKE_EDN_SYMBOL;
     extern VALUE EDNT_MAKE_SET_METHOD;
     extern VALUE EDNT_TAGGED_ELEM;
+    extern VALUE EDNT_BIND_META_TO_VALUE;
     extern VALUE EDNT_STR_INT_TO_BIGNUM;
     extern VALUE EDNT_STR_DBL_TO_BIGNUM;
+    extern VALUE EDNT_EOF;
 
     //
     // C-extension EDN Parser class representation
@@ -24,11 +26,15 @@ namespace edn
     public:
         Parser() : p(NULL), pe(NULL), eof(NULL), line_number(1) { }
 
+        // change input source
         void set_source(const char* src, std::size_t len);
 
-        bool is_eof() const { return (p != NULL && p == pe); }
+        bool is_eof() const { return (p == eof); }
+
+        // parses an entire stream
         VALUE parse(const char* s, std::size_t len);
-        //        VALUE read(const std::string& data) { return parse(data.c_str(), data.length()); }
+
+        // returns the next element in the current stream
         VALUE next();
 
         static void throw_error(int error);
@@ -39,9 +45,10 @@ namespace edn
         const char* pe;
         const char* eof;
         std::size_t line_number;
-        std::stack<VALUE> discard;
+        std::vector<VALUE> discard;
+        std::vector<VALUE> metadata;
 
-        void reset();
+        void reset_state();
 
         const char* parse_value   (const char *p, const char *pe, VALUE& v);
         const char* parse_string  (const char *p, const char *pe, VALUE& v);
@@ -58,6 +65,11 @@ namespace edn
         const char* parse_set     (const char *p, const char *pe, VALUE& v);
         const char* parse_discard (const char *p, const char *pe);
         const char* parse_tagged  (const char *p, const char *pe, VALUE& v);
+        const char* parse_meta    (const char *p, const char *pe);
+
+        enum eTokenState { TOKEN_OK, TOKEN_ERROR, TOKEN_IS_DISCARD, TOKEN_IS_META };
+
+        eTokenState parse_next(VALUE& value);
 
         // defined in edn_parser_unicode.cc
         static bool to_utf8(const char *s, std::size_t len, std::string& rslt);
@@ -72,6 +84,10 @@ namespace edn
         static VALUE make_edn_symbol(VALUE sym);
         static VALUE make_ruby_set(VALUE elems);
         static VALUE tagged_element(VALUE name, VALUE data);
+
+        // metadata
+        VALUE ruby_meta();
+        VALUE bind_meta_to_value(VALUE value);
 
         // utility method to convert a primitive in string form to a
         // ruby type

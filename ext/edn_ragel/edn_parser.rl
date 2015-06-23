@@ -1,6 +1,6 @@
 #include <iostream>
 #include <string>
-#include <stack>
+#include <vector>
 #include <exception>
 
 #include "edn_parser.h"
@@ -23,23 +23,19 @@
         comment        = ';' cr_neg* counter;
         ignore         = ws | comment;
 
-        operators      = [/\.\*!_\?$%&<>\=+\-];
-        symbol_start   = alpha;
-        symbol_chars   = symbol_start | digit | [\#:_\-\.];
+        operators      = [/\.\*!_\?$%&<>\=+\-\'];
 
         begin_dispatch = '#';
         begin_keyword  = ':';
         begin_char     = '\\';
-        begin_value    = alnum | [:\"\{\[\(\\\#] | operators;
-        begin_symbol   = symbol_start;
         begin_vector   = '[';
         begin_map      = '{';
         begin_list     = '(';
+        begin_meta     = '^';
         string_delim   = '"';
         begin_number   = digit;
-
-        symbol_name    = symbol_start (symbol_chars)*;
-        symbol         = (symbol_name ('/' symbol_name)?);
+        begin_value    = alnum | [:\"\{\[\(\\\#^] | operators;
+        begin_symbol   = alpha;
 
         # int / decimal rules
         integer        = ('0' | [1-9] digit*);
@@ -145,6 +141,12 @@
         if (np == NULL) { fhold; fbreak; } else fexec np;
     }
 
+    action parse_meta {
+        // ^
+        const char *np = parse_meta(fpc, pe);
+        if (np == NULL) { fhold; fbreak; } else fexec np;
+    }
+
     action parse_dispatch {
         // handles tokens w/ leading # ("#_", "#{", and tagged elems)
         const char *np = parse_dispatch(fpc + 1, pe, v);
@@ -162,6 +164,7 @@
              begin_vector >parse_vector |
              begin_list >parse_list |
              begin_map >parse_map |
+             begin_meta >parse_meta |
              begin_dispatch >parse_dispatch
             ) %*exit;
 }%%
@@ -223,7 +226,6 @@ const char *edn::Parser::parse_value(const char *p, const char *pe, VALUE& v)
 
 const char* edn::Parser::parse_string(const char *p, const char *pe, VALUE& v)
 {
-    //    std::cerr << __FUNCTION__ << "   -  p: '" << p << "'" << std::endl;
     static const char* EDN_TYPE = "string";
     int cs;
     bool encode = false;
@@ -251,15 +253,16 @@ const char* edn::Parser::parse_string(const char *p, const char *pe, VALUE& v)
     machine EDN_keyword;
     include EDN_common;
 
-    keyword_chars = symbol_chars | operators;
-    keyword_start = symbol_start | [\#\./];
+    keyword_start = alpha | [\.\*!_\?$%&<>\=+\-\'\#];
+    keyword_chars = (keyword_start | digit | ':');
 
-    keyword_name    = keyword_start (keyword_chars)*;
+    keyword_name  = keyword_start keyword_chars*;
+    keyword       = keyword_name ('/' keyword_chars*)?;
 
     write data;
 
 
-    main := begin_keyword keyword_name (^keyword_chars? @exit);
+    main := begin_keyword keyword (^(keyword_chars | '/')? @exit);
 }%%
 
 
@@ -280,7 +283,7 @@ const char* edn::Parser::parse_keyword(const char *p, const char *pe, VALUE& v)
         return p;
     }
     else if (cs == EDN_keyword_error) {
-        error(__FUNCTION__, *p);
+        error(__FUNCTION__, "Invalid keyword", *p);
         return pe;
     }
     else if (cs == EDN_keyword_en_main) {} // silence ragel warning
@@ -411,10 +414,10 @@ const char* edn::Parser::parse_integer(const char *p, const char *pe, VALUE& v)
 
 
     main := (
-             ('-'|'+'|'.') alpha >parse_symbol |
              ('-'|'+') begin_number >parse_number |
+             operators (alpha|operators|':') >parse_symbol |
              operators ignore* >parse_operator
-             ) ^(operators|alpha|digit)? @exit;
+             ) ^(operators|alpha|digit|':')? @exit;
 }%%
 
 
@@ -495,10 +498,20 @@ const char* edn::Parser::parse_esc_char(const char *p, const char *pe, VALUE& v)
 
     write data;
 
+    symbol_start = alpha | [\.\*!_\?$%&<>\=+\-\'];
+    symbol_chars = symbol_start | digit | ':' | '#';
+    symbol_name  = (
+                    (alpha symbol_chars*) |
+                    ([\-\+\.] symbol_start symbol_chars*) |
+                    ([/\*!_\?$%&<>\=\'] symbol_chars+) |
+                    operators{1}
+                    );
+    symbol       = '/' | (symbol_name ('/' symbol_name)?);
+
 
     main := (
-             operators? symbol
-             ) ignore* (^(symbol_chars | operators)? @exit);
+             symbol
+             ) ignore* (^(symbol_chars | '/')? @exit);
 }%%
 
 
@@ -551,7 +564,7 @@ const char* edn::Parser::parse_symbol(const char *p, const char *pe, VALUE& s)
             // object is not meant to be kept due to a #_ so don't
             // push it into the list of elements
             if (!discard.empty()) {
-                discard.pop();
+                discard.pop_back();
             }
             else {
                 // otherwise we add it to the list of elements for the
@@ -830,21 +843,25 @@ const char* edn::Parser::parse_set(const char *p, const char *pe, VALUE& v)
 
     action discard_value {
         const char *np = parse_value(fpc, pe, v);
-        if (np) {
-            // this token is to be discard it so store it in the
+        if (np == NULL) { fhold; fbreak; } else {
+            // this token is to be discarded so store it in the
             // discard stack - we really don't need to save it so this
             // could be simplified
-            discard.push(v);
+            discard.push_back(v);
             fexec np;
-        } else {
-            fhold; fbreak;
         }
     }
 
+    action discard_err {
+        std::stringstream s;
+        s << "discard sequence without element to discard";
+        error(__FUNCTION__, s.str());
+        fhold; fbreak;
+    }
 
     main := begin_discard ignore* (
                                    begin_value >discard_value
-                                   ) @exit;
+                                   ) @err(discard_err) @exit;
 }%%
 
 
@@ -888,6 +905,11 @@ const char* edn::Parser::parse_discard(const char *p, const char *pe)
     machine EDN_tagged;
     include EDN_common;
 
+    tag_symbol_chars_start = alpha;
+    tag_symbol_chars       = tag_symbol_chars_start | [\-_];
+    tag_symbol_name        = tag_symbol_chars_start (tag_symbol_chars)*;
+    tag_symbol             = (tag_symbol_name ('/' tag_symbol_name)?);
+
 #    inst = (string_delim [0-9+\-:\.TZ]* string_delim);
 #    uuid = (string_delim [a-f0-9\-]* string_delim);
 
@@ -905,7 +927,7 @@ const char* edn::Parser::parse_discard(const char *p, const char *pe)
     }
 
 
-    main := (symbol >parse_symbol ignore* begin_value >parse_value) @exit;
+    main := (tag_symbol >parse_symbol ignore* begin_value >parse_value) @exit;
 }%%
 
 
@@ -943,6 +965,51 @@ const char* edn::Parser::parse_tagged(const char *p, const char *pe, VALUE& v)
 
 
 // ============================================================
+// metadata - looks like ruby just discards this but we'll track it
+// and provide a means to retrive after each parse op - might be
+// useful?
+//
+%%{
+    machine EDN_meta;
+    include EDN_common;
+
+    write data;
+
+    action parse_meta {
+        const char *np = parse_value(fpc, pe, v);
+        if (np == NULL) { fhold; fbreak; } else fexec np;
+    }
+
+    main := begin_meta (
+                        begin_value >parse_meta
+                        ) @exit;
+}%%
+
+
+const char* edn::Parser::parse_meta(const char *p, const char *pe)
+{
+    int cs;
+    VALUE v;
+
+    %% write init;
+    %% write exec;
+
+    if (cs >= EDN_meta_first_final) {
+        metadata.push_back(v);
+        return p + 1;
+    }
+    else if (cs == EDN_meta_error) {
+        error(__FUNCTION__, *p);
+        return pe;
+    }
+    else if (cs == EDN_meta_en_main) {} // silence ragel warning
+
+    return NULL;
+}
+
+
+
+// ============================================================
 // parses entire input but expects single valid token at the
 // top-level, therefore, does not tokenize source stream
 //
@@ -953,8 +1020,21 @@ const char* edn::Parser::parse_tagged(const char *p, const char *pe, VALUE& v)
     write data;
 
     action parse_value {
+        // save the count of metadata items before we parse this value
+        // so we can determine if we've read another metadata value or
+        // an actual data item
+        std::size_t meta_size = metadata.size();
         const char* np = parse_value(fpc, pe, result);
-        if (np == NULL) { fexec pe; fbreak; } else fexec np;
+        if (np == NULL) { fexec pe; fbreak; } else {
+            // if we have metadata saved and it matches the count we
+            // saved before we parsed a value, then we must bind the
+            // metadata sequence to it
+            if (!metadata.empty() && metadata.size() == meta_size) {
+                // this will empty the metadata sequence too
+                result = bind_meta_to_value(result);
+            }
+            fexec np;
+        }
     }
 
     element       = begin_value >parse_value;
@@ -970,23 +1050,17 @@ VALUE edn::Parser::parse(const char* src, std::size_t len)
     int cs;
     VALUE result = Qnil;
 
-    // reset line counter & discard stack
-    reset();
-
     %% write init;
-    p = src;
-    pe = p + len;
-    eof = pe;
+    set_source(src, len);
     %% write exec;
 
     if (cs == EDN_parser_error) {
-        error(__FUNCTION__, *p);
-        return Qnil;
+        if (p)
+            error(__FUNCTION__, *p);
+        return EDNT_EOF;
     }
     else if (cs == EDN_parser_first_final) {
-        // whole source is parsed so reset
         p = pe = eof = NULL;
-        reset();
     }
     else if (cs == EDN_parser_en_main) {} // silence ragel warning
     return result;
@@ -1000,32 +1074,62 @@ VALUE edn::Parser::parse(const char* src, std::size_t len)
     machine EDN_tokens;
     include EDN_common;
 
-    write data noerror nofinal;
+    write data nofinal noerror;
 
-    action parse_value {
-        const char* np = parse_value(fpc, pe, result);
-        if (np == NULL) { fhold; fbreak; } else { fexec np; }
+    action parse_token {
+        // we won't know if we've parsed a discard or a metadata until
+        // after parse_value() is done. Save the current number of
+        // elements in the metadata sequence; then we can check if it
+        // grew or if the discard sequence grew
+        meta_size = metadata.size();
+
+        const char* np = parse_value(fpc, pe, value);
+        if (np == NULL) { fhold; fbreak; } else {
+            if (metadata.size() > 0) {
+                // was an additional metadata entry read? if so, don't
+                // return a value
+                if (metadata.size() > meta_size) {
+                    state = TOKEN_IS_META;
+                }
+                else {
+                    // a value was read and there's a pending metadata
+                    // sequence. Bind them.
+                    value = bind_meta_to_value(value);
+                    state = TOKEN_OK;
+                }
+            } else if (!discard.empty()) {
+                // a discard read. Don't return a value
+                state = TOKEN_IS_DISCARD;
+            } else {
+                state = TOKEN_OK;
+            }
+            fexec np;
+        }
     }
 
-    element       = begin_value >parse_value;
-
-    main := ignore* element ignore*;
+    main := ignore* begin_value >parse_token ignore*;
 }%%
 
 
 //
 //
-VALUE edn::Parser::next()
+edn::Parser::eTokenState edn::Parser::parse_next(VALUE& value)
 {
-    VALUE result = Qnil;
     int cs;
+    eTokenState state = TOKEN_ERROR;
+    // need to track metadada read and bind it to the next value read
+    // - but must account for sequences of metadata values
+    std::size_t meta_size;
+
+    // clear any previously saved discards; only track if read during
+    // this op
+    discard.clear();
 
     %% write init;
     %% write exec;
 
     if (cs == EDN_tokens_en_main) {} // silence ragel warning
-
-    return result;
+    return state;
 }
 
 

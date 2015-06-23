@@ -1,5 +1,4 @@
 #include <iostream>
-#include <iomanip>
 #include <string>
 #include <limits>
 #include <exception>
@@ -26,20 +25,47 @@ namespace edn
 
 
     // =================================================================
+    // for token-by-token parsing. If a discard or metadata is parsed,
+    // attempt to get the following value
+    //
+    VALUE Parser::next()
+    {
+        VALUE token = EDNT_EOF;
+
+        while (!is_eof())
+        {
+            // fetch a token. If it's metadata or discard
+            VALUE v;
+            eTokenState state = parse_next(v);
+
+            if (state == TOKEN_OK) {
+                // valid token
+                token = v;
+                break;
+            }
+            else if (state == TOKEN_ERROR) {
+                token = EDNT_EOF;
+                break;
+            }
+        }
+
+        return token;
+    }
+
     // reset parsing state
     //
-    void Parser::reset()
+    void Parser::reset_state()
     {
         line_number = 1;
-        while (!discard.empty())
-            discard.pop();
+        discard.clear();
+        metadata.clear();
     }
 
     //
     // set a new source
     void Parser::set_source(const char* src, std::size_t len)
     {
-        reset();
+        reset_state();
         // set ragel state
         p = src;
         pe = src + len;
@@ -55,16 +81,20 @@ namespace edn
 
     // we're using at most 2 args
     struct prot_args {
-        prot_args(ID m, VALUE arg) :
-            method(m), count(1) {
+        prot_args(ID r, ID m, VALUE arg) :
+            receiver(r), method(m), count(1) {
             args[0] = arg;
         }
-        prot_args(ID m, VALUE arg1, VALUE arg2) :
-            method(m), count(2) {
+        prot_args(ID r, ID m, VALUE arg1, VALUE arg2) :
+            receiver(r), method(m), count(2) {
             args[0] = arg1;
             args[1] = arg2;
         }
 
+        VALUE call() const { return rb_funcall2( receiver, method, count, args ); }
+
+    private:
+        ID receiver;
         ID method;
         VALUE count;
         VALUE args[2];
@@ -73,8 +103,10 @@ namespace edn
     // this allows us to wrap with rb_protect()
     static inline VALUE edn_wrap_funcall2( VALUE arg )
     {
-        prot_args* a = reinterpret_cast<prot_args*>(arg);
-        return rb_funcall2( edn::rb_mEDNT, a->method, a->count, a->args );
+        const prot_args* a = reinterpret_cast<const prot_args*>(arg);
+        if (a)
+            return a->call();
+        return Qnil;
     }
 
     static inline VALUE edn_prot_rb_funcall( edn_rb_f_type func, VALUE args )
@@ -113,7 +145,7 @@ namespace edn
 
         // value is outside of range of long type. Use ruby to convert it
         VALUE rb_s = edn_prot_rb_new_str( str );
-        prot_args args(EDNT_STR_INT_TO_BIGNUM, rb_s);
+        prot_args args(rb_mEDNT, EDNT_STR_INT_TO_BIGNUM, rb_s);
         return edn_prot_rb_funcall( edn_wrap_funcall2, reinterpret_cast<VALUE>(&args) );
     }
 
@@ -127,7 +159,7 @@ namespace edn
         }
 
         // value is outside of range of long type. Use ruby to convert it
-        prot_args args(EDNT_STR_DBL_TO_BIGNUM, edn_prot_rb_new_str(str));
+        prot_args args(rb_mEDNT, EDNT_STR_DBL_TO_BIGNUM, edn_prot_rb_new_str(str));
         return edn_prot_rb_funcall( edn_wrap_funcall2, reinterpret_cast<VALUE>(&args) );
     }
 
@@ -193,7 +225,7 @@ namespace edn
     // get a set representation from the ruby side. See edn_turbo.rb
     VALUE Parser::make_edn_symbol(VALUE sym)
     {
-        prot_args args(edn::EDNT_MAKE_EDN_SYMBOL, sym);
+        prot_args args(rb_mEDNT, EDNT_MAKE_EDN_SYMBOL, sym);
         return edn_prot_rb_funcall( edn_wrap_funcall2, reinterpret_cast<VALUE>(&args) );
     }
 
@@ -201,7 +233,7 @@ namespace edn
     // get a set representation from the ruby side. See edn_turbo.rb
     VALUE Parser::make_ruby_set(VALUE elems)
     {
-        prot_args args(edn::EDNT_MAKE_SET_METHOD, elems);
+        prot_args args(rb_mEDNT, EDNT_MAKE_SET_METHOD, elems);
         return edn_prot_rb_funcall( edn_wrap_funcall2, reinterpret_cast<VALUE>(&args) );
     }
 
@@ -209,11 +241,38 @@ namespace edn
     // get an object representation from the ruby side using the given symbol name
     VALUE Parser::tagged_element(VALUE name, VALUE data)
     {
-        prot_args args(edn::EDNT_TAGGED_ELEM, name, data);
+        prot_args args(rb_mEDNT, EDNT_TAGGED_ELEM, name, data);
         return edn_prot_rb_funcall( edn_wrap_funcall2, reinterpret_cast<VALUE>(&args) );
     }
 
 
+    // =================================================================
+    // METADATA
+    //
+    // returns an array of metadata value(s) saved in reverse order
+    // (right to left) - the ruby side will interpret this
+    VALUE Parser::ruby_meta()
+    {
+        VALUE m = rb_ary_new();
+
+        while (!metadata.empty()) {
+            rb_ary_push(m, metadata.back());
+            metadata.pop_back();
+        }
+
+        return m;
+    }
+
+    //
+    // calls the ruby-side bind_meta to bind the metadata to the value
+    VALUE Parser::bind_meta_to_value(VALUE value)
+    {
+        prot_args args(rb_mEDNT, EDNT_BIND_META_TO_VALUE, value, ruby_meta());
+        return edn_prot_rb_funcall( edn_wrap_funcall2, reinterpret_cast<VALUE>(&args) );
+    }
+
+
+    // =================================================================
     //
     // error reporting
     void Parser::throw_error(int error)
