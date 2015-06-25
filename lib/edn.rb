@@ -4,22 +4,13 @@ require 'edn/core_ext'
 require 'edn/types'
 require 'edn/metadata'
 require 'edn/char_stream'
+require 'edn/parser_common'
 require 'edn/parser'
 require 'edn/ragel_parser'
 require 'edn/reader'
 require 'edn/edn_ragel'
 
 module EDN
-
-  # Object returned when there is nothing to return
-
-  NOTHING = Object.new
-
-  # Object to return when we hit end of file. Cant be nil or :eof
-  # because either of those could be something in the EDN data.
-
-  EOF = Object.new
-
 
   # tagged element registered items
   @tags = {
@@ -75,4 +66,26 @@ module EDN
   def self.list(*values)
     EDN::Type::List.new(*values)
   end
+
+
+  #
+  # moved from read_meta() in parser.rb
+  def self.bind_metadata_to_value(value, rev_raw_metadata)
+    metadata = rev_raw_metadata.reduce({}) do |acc, m|
+      case m
+      when Symbol then acc.merge(m => true)
+      when EDN::Type::Symbol then acc.merge(:tag => m)
+      else acc.merge(m)
+      end
+    end
+
+    if !metadata.empty?
+      value.extend Metadata
+      value.metadata = metadata
+    end
+
+    value
+  end
+
+
 end

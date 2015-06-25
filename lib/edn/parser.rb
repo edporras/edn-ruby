@@ -49,9 +49,8 @@ module EDN
     def read(return_nothing=false)
       meta = read_meta
       value = read_basic(return_nothing)
-      if meta && value != NOTHING
-        value.extend EDN::Metadata
-        value.metadata = meta
+      if !meta.empty? && value != EDN::NOTHING
+        value = EDN::bind_metadata_to_value(value, meta)
       end
       value
     end
@@ -65,7 +64,7 @@ module EDN
     end
 
     def read_eof
-      EOF
+      EDN::EOF
     end
 
     def read_char
@@ -133,7 +132,7 @@ module EDN
       elsif @s.current == "_"
         @s.advance
         x = read
-        NOTHING
+        EDN::NOTHING
       else
         tag = read_symbol_chars
         value = read
@@ -192,7 +191,7 @@ module EDN
       @s.skip_ws
       ch = @s.current
       result = call_reader(READERS[ch])
-      while NOTHING.equal?(result) && !return_nothing
+      while EDN::NOTHING.equal?(result) && !return_nothing
         @s.skip_ws
         result = call_reader(READERS[@s.current])
       end
@@ -259,14 +258,7 @@ module EDN
         @s.skip_ws
       end
 
-      metadata = raw_metadata.reverse.reduce({}) do |acc, m|
-        case m
-        when Symbol then acc.merge(m => true)
-        when EDN::Type::Symbol then acc.merge(:tag => m)
-        else acc.merge(m)
-        end
-      end
-      metadata.empty? ? nil : metadata
+      raw_metadata.reverse
     end
 
     def read_list
@@ -294,7 +286,7 @@ module EDN
         raise "Unexpected eof" if @s.eof?
         break if @s.current == closing
         next_value = read(true)
-        result << next_value unless next_value == NOTHING
+        result << next_value unless next_value == EDN::NOTHING
       end
       @s.advance
       result
