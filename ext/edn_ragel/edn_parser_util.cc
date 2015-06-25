@@ -35,7 +35,7 @@ namespace edn
         while (!is_eof())
         {
             // fetch a token. If it's metadata or discard
-            VALUE v;
+            VALUE v = EDNT_EOF;
             eTokenState state = parse_next(v);
 
             if (state == TOKEN_OK) {
@@ -58,7 +58,13 @@ namespace edn
     {
         line_number = 1;
         discard.clear();
-        metadata.clear();
+
+        // remove any remaining levels except for the first
+        while (metadata.size() > 1) {
+            del_top_meta_list();
+        }
+        // but clear any metadata on the first
+        metadata.back()->clear();
     }
 
     //
@@ -253,14 +259,15 @@ namespace edn
     // (right to left) - the ruby side will interpret this
     VALUE Parser::ruby_meta()
     {
-        VALUE m = rb_ary_new();
+        VALUE m_ary = rb_ary_new();
 
-        while (!metadata.empty()) {
-            rb_ary_push(m, metadata.back());
-            metadata.pop_back();
+        // pop from the back of the top-most list
+        while (!metadata.back()->empty()) {
+            rb_ary_push(m_ary, metadata.back()->back());
+            metadata.back()->pop_back();
         }
 
-        return m;
+        return m_ary;
     }
 
     //
