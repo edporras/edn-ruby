@@ -67,10 +67,14 @@ module EDN
     EDN::Type::List.new(*values)
   end
 
+  def self.set(*values)
+    Set.new(*values)
+  end
+
 
   #
   # moved from read_meta() in parser.rb
-  def self.bind_metadata_to_value(value, rev_raw_metadata)
+  def self.extend_for_meta(value, rev_raw_metadata)
     metadata = rev_raw_metadata.reduce({}) do |acc, m|
       case m
       when Symbol then acc.merge(m => true)
