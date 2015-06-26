@@ -1,0 +1,41 @@
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
+
+$LOAD_PATH << File.expand_path( File.dirname(__FILE__) + '/../lib' )
+
+require 'optparse'
+require 'edn'
+require 'pp'
+
+options = {}
+optparse = OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0} [options] filename"
+
+  opts.on( '-v', '--version', 'Display version information and exit' ) do
+    $stderr.puts "EDN parsing C++-extension version #{EDNt::VERSION}"
+    exit
+  end
+
+  opts.on( '-h', '--help', 'Display this screen' ) do
+    $stderr.puts opts
+    exit
+  end
+end
+optparse.parse!
+
+if ARGV.size == 0
+  $stderr.puts optparse
+  exit 1
+end
+
+filename = ARGV[0]
+if !File.exist? filename
+  $stderr.puts "Path '#{filename}' not valid"
+  exit 1
+end
+
+# mimic edn-ruby usage
+File.open(filename) do |file|
+  output = EDN.read(file)
+  pp output if output != nil
+end

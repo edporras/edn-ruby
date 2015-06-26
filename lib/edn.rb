@@ -9,6 +9,8 @@ require 'edn/metadata'
 require 'edn/char_stream'
 require 'edn/parser'
 require 'edn/reader'
+require 'edn/ragel_parser'  # .rb
+require 'edn/edn_ext'       # .bundle/.so
 
 module EDN
   def self.read(edn, eof_value=NOTHING)
@@ -26,6 +28,11 @@ module EDN
   def self.list(*values)
     EDN::Type::List.new(*values)
   end
+
+  def self.set(*values)
+    Set.new(*values)
+  end
+
 end
 
 EDN.register("inst") do |value|
