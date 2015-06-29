@@ -20,25 +20,4 @@ module EDN
 
   end
 
-  # ----------------------------------------------------------------------------
-  # handles creation of a set from an array
-  #
-  def self.make_set(elems)
-    Set.new(elems)
-  end
-
-  # ----------------------------------------------------------------------------
-  # to create Big Ints (for now)
-  #
-  def self.string_int_to_bignum(str)
-    str.to_i
-  end
-
-  # ----------------------------------------------------------------------------
-  # to create Big Ints (for now)
-  #
-  def self.string_double_to_bignum(str)
-    str.to_f
-  end
-
 end
