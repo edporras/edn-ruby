@@ -12,6 +12,7 @@ Gem::Specification.new do |gem|
   gem.files         = `git ls-files`.split($\)
   gem.executables   = gem.files.grep(%r{^bin/}).map{ |f| File.basename(f) }
   gem.test_files    = gem.files.grep(%r{^(test|spec|features)/})
+  gem.extensions    = ['ext/edn_ext/extconf.rb']
   gem.name          = "edn"
   gem.require_paths = ["lib"]
   gem.version       = EDN::VERSION
@@ -19,5 +20,6 @@ Gem::Specification.new do |gem|
   gem.add_development_dependency 'pry', '~> 0.9.10'
   gem.add_development_dependency 'rspec', '~> 2.11.0'
   gem.add_development_dependency 'rantly', '~> 0.3.1'
-  gem.add_development_dependency 'rake', '~> 10.0.3'
+  gem.add_dependency 'rake', '~> 10.0'
+  gem.add_dependency 'rake-compiler', '~> 0.9'
 end

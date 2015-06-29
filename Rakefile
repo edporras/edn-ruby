@@ -51,7 +51,7 @@ task :build => [:clean, :ragel, :compile, :chmod]
 
 RSpec::Core::RakeTask.new(:spec)
 
-task :default => :compile
+task :default => :spec
 
 task :irb do
   sh "irb -I lib -r edn"
