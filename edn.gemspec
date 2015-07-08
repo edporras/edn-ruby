@@ -9,9 +9,7 @@ Gem::Specification.new do |gem|
   gem.homepage      = "https://github.com/relevance/edn-ruby"
   gem.license       = "MIT"
 
-  files             = `git ls-files`.split($\)
-  gem.files         = files.select { |val| !val.match(/ext_parser/) && !val.match(/ext\//) }
-  gem.files.each { |f| $stderr.puts "#{f}" }
+  gem.files         = `git ls-files`.split($\).select { |val| !val.match(/ext_parser/) && !val.match(/ext\//) }
 
   gem.executables   = gem.files.grep(%r{^bin/}).map{ |f| File.basename(f) }
   gem.test_files    = gem.files.grep(%r{^(test|spec|features)/})

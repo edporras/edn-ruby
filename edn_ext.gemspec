@@ -2,16 +2,14 @@
 require File.expand_path('../lib/edn/version', __FILE__)
 
 Gem::Specification.new do |gem|
-  gem.authors       = ["Clinton N. Dreisbach & Russ Olsen"]
+  gem.authors       = ["Clinton N. Dreisbach & Russ Olsen. Ragel parser by Ed Porras."]
   gem.email         = ["russ@russolsen.com"]
   gem.description   = %q{'edn implements a reader for Extensible Data Notation by Rich Hickey.'}
   gem.summary       = gem.description
   gem.homepage      = "https://github.com/relevance/edn-ruby"
   gem.license       = "MIT"
 
-  files             = `git ls-files`.split($\)
-  gem.files         = files.select { |val| !val.match(/native_parser/) }
-  gem.files.each { |f| $stderr.puts "#{f}" }
+  gem.files         = `git ls-files`.split($\).select { |val| !val.match(/native_parser/) }
   gem.extensions    = ['ext/edn_ext/extconf.rb']
 
   gem.executables   = gem.files.grep(%r{^bin/}).map{ |f| File.basename(f) }
