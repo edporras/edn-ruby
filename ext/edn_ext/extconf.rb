@@ -21,4 +21,4 @@ unless have_library('icuuc')
   abort "ic4c lib missing"
 end
 
-create_makefile("edn_turbo/edn_turbo")
+create_makefile("edn/ext_parser/edn_ext")

@@ -4,7 +4,7 @@ module EDN
     def initialize(source)
       data = source.instance_of?(String) ? source : source.read
 
-      @parser = ExtParser.new(data)
+      @parser = Parser.new(data)
     end
 
     def read(eof_value = NOTHING)

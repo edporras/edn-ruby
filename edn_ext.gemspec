@@ -10,12 +10,13 @@ Gem::Specification.new do |gem|
   gem.license       = "MIT"
 
   files             = `git ls-files`.split($\)
-  gem.files         = files.select { |val| !val.match(/ext_parser/) && !val.match(/ext\//) }
+  gem.files         = files.select { |val| !val.match(/native_parser/) }
   gem.files.each { |f| $stderr.puts "#{f}" }
+  gem.extensions    = ['ext/edn_ext/extconf.rb']
 
   gem.executables   = gem.files.grep(%r{^bin/}).map{ |f| File.basename(f) }
   gem.test_files    = gem.files.grep(%r{^(test|spec|features)/})
-  gem.name          = "edn"
+  gem.name          = "edn_ext"
   gem.require_paths = ["lib"]
   gem.version       = EDN::VERSION
 
@@ -23,4 +24,5 @@ Gem::Specification.new do |gem|
   gem.add_development_dependency 'rspec', '~> 2.11.0'
   gem.add_development_dependency 'rantly', '~> 0.3.1'
   gem.add_dependency 'rake', '~> 10.0'
+  gem.add_dependency 'rake-compiler', '~> 0.9'
 end

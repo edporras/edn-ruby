@@ -130,7 +130,7 @@ void Init_edn_ext(void)
     edn::rb_mEDNT = rb_define_module("EDN");
 
     // bind the ruby Parser class to the C++ one
-    VALUE rb_cParser = rb_define_class_under(edn::rb_mEDNT, "ExtParser", rb_cObject);
+    VALUE rb_cParser = rb_define_class_under(edn::rb_mEDNT, "Parser", rb_cObject);
     rb_define_alloc_func(rb_cParser, edn::alloc_obj);
     rb_define_method(rb_cParser, "initialize", (VALUE(*)(ANYARGS)) &edn::initialize, -1 );
     rb_define_method(rb_cParser, "ext_set_stream", (VALUE(*)(ANYARGS)) &edn::set_source, 1 );

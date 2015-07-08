@@ -2,7 +2,7 @@ require 'bigdecimal'
 
 module EDN
 
-  class ExtParser
+  class Parser
 
     # call the c-side method
     def set_input(data)

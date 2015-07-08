@@ -7,10 +7,13 @@ require 'edn/core_ext'
 require 'edn/types'
 require 'edn/metadata'
 require 'edn/char_stream'
-require 'edn/parser'
 require 'edn/reader'
-require 'edn/ragel_parser'  # .rb
-require 'edn/edn_ext'       # .bundle/.so
+require 'edn/parsers'
+
+#Dir[File.join(File.dirname(__FILE__), 'edn', 'edn_ext.*')].each do |file|
+#  require file
+#end
+
 
 module EDN
   def self.read(edn, eof_value=NOTHING)
